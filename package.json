@@ -5,9 +5,9 @@
   "author": "Haseeb Zaidi <syedhaseebzaidi4@gmail.com>",
   "license": "ISC",
   "scripts": {
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "test:chrome": "playwright test --headed --channel=chrome",
+    "test": "playwright test --project=chromium",
+    "test:headed": "playwright test --project=chromium --headed",
+    "test:chrome": "playwright test --project=chrome --headed",
     "test:ui": "playwright test --ui",
     "test:report": "playwright show-report artifacts/report"
   },
