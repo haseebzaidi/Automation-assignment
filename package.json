@@ -7,6 +7,8 @@
   "scripts": {
     "test": "playwright test",
     "test:headed": "playwright test --headed",
+    "test:chrome": "playwright test --project=chrome --headed",
+    "test:ui": "playwright test --ui",
     "test:report": "playwright show-report artifacts/report"
   },
   "devDependencies": {
