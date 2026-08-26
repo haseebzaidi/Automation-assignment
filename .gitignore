@@ -11,6 +11,9 @@ blob-report/
 .env
 .env.local
 
+# Challenge specification documents
+*.pdf
+
 # OS files
 .DS_Store
 Thumbs.db
