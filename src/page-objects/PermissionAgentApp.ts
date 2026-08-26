@@ -17,7 +17,7 @@ export class PermissionAgentApp {
   readonly messageContainers: Locator;
   readonly messageContents: Locator;
 
-  // Consent modal
+  // Consent modal locators
   private readonly cookieRejectButton: Locator;
 
   // Server error signatures
@@ -37,20 +37,22 @@ export class PermissionAgentApp {
     this.signupNavButton = page.locator('[data-testid="sign-up-button"]');
     this.messageContainers = page.locator('div.flex.justify-start');
     this.messageContents = page.locator('div.flex.justify-start div.text-md');
-    this.cookieRejectButton = page.locator('#onetrust-reject-all-handler, button:has-text("Reject All")');
+    this.cookieRejectButton = page.locator('#onetrust-reject-all-handler, button:has-text("Reject All"), #onetrust-accept-btn-handler, button:has-text("Accept All")');
   }
 
   /**
    * Gracefully clears the OneTrust consent modal if triggered.
    */
-  async dismissOneTrustConsent(timeoutMs: number = 5_000): Promise<void> {
+  async dismissOneTrustConsent(timeoutMs: number = 6_000): Promise<void> {
     try {
-      if (await this.cookieRejectButton.first().isVisible({ timeout: timeoutMs })) {
-        await this.cookieRejectButton.first().click();
-        await this.cookieRejectButton.first().waitFor({ state: 'hidden', timeout: 4_000 }).catch(() => {});
+      const banner = this.page.locator('#onetrust-consent-sdk');
+      const rejectBtn = this.cookieRejectButton.first();
+      if (await rejectBtn.isVisible({ timeout: timeoutMs })) {
+        await rejectBtn.click({ force: true });
+        await banner.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
       }
     } catch {
-      // Modal was not presented in this viewport/session
+      // Modal was not presented or already dismissed
     }
   }
 
@@ -74,6 +76,9 @@ export class PermissionAgentApp {
       await this.chatInput.waitFor({ state: 'visible', timeout: 25_000 });
       await firstTopic.waitFor({ state: 'visible', timeout: 25_000 });
     }
+
+    // Secondary safety check for async delayed banners
+    await this.dismissOneTrustConsent(2_000);
   }
 
   /**
@@ -104,6 +109,7 @@ export class PermissionAgentApp {
    * Enters a custom prompt into the ASK input and triggers send.
    */
   async askFreeformQuestion(question: string): Promise<void> {
+    await this.dismissOneTrustConsent(2_000);
     await this.chatInput.click();
     await this.chatInput.fill(question);
     await expect(this.sendButton).toBeEnabled();

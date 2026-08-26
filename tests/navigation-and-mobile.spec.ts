@@ -39,6 +39,7 @@ test.describe('Navigation Routing & Mobile Responsive Viewport', () => {
 
     try {
       await mobileApp.loadAndPrepareSession();
+      await mobileApp.dismissOneTrustConsent(3_000);
 
       // Verify suggested topic pills render and adapt
       const firstTopicPill = mobileApp.getTopicPill(EXPLORE_TOPICS[0]);
