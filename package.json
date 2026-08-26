@@ -1,0 +1,17 @@
+{
+  "name": "sqa-homework-haseeb-zaidi",
+  "version": "1.0.0",
+  "description": "Playwright TypeScript automated test suite and QA assessment for ask.permission.ai",
+  "author": "Haseeb Zaidi <syedhaseebzaidi4@gmail.com>",
+  "license": "ISC",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:report": "playwright show-report artifacts/report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0",
+    "@types/node": "^22.13.9",
+    "typescript": "^5.8.2"
+  }
+}
