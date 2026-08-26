@@ -1,75 +1,69 @@
 import { test, expect } from '@playwright/test';
-import {
-  navigateToChatHome,
-  navigateColdLanding,
-  getSuggestedTopicPill,
-} from './helpers/chatActions';
-import { CHAT_SELECTORS, PROMPT_TOPICS } from './helpers/selectors';
+import { PermissionAgentApp } from '../src/page-objects/PermissionAgentApp';
+import { EXPLORE_TOPICS } from '../src/types/chat.types';
 
-test.describe('Pre-Login Landing Page & Textarea Mechanics', () => {
+test.describe('Landing View & Chat Input Mechanics', () => {
   test('verify suggested topic pills are present on initial page load [Required #1]', async ({ page }) => {
     /**
-     * Requirement: The page loads with the suggested-topic pills visible.
+     * Requirement 1: The page loads with the suggested-topic pills visible.
      * 
      * Evaluation rationale: This test performs a clean cold navigation without triggering
      * any reload workarounds. On ask.permission.ai, cold loads fail to render suggested topics
      * on first paint. This test intentionally fails on the live environment to accurately
      * document and catch this client-side hydration bug.
      */
-    await navigateColdLanding(page);
+    const app = new PermissionAgentApp(page);
+    await app.loadInitialViewUncached();
 
-    for (const topic of PROMPT_TOPICS) {
-      const topicPill = getSuggestedTopicPill(page, topic);
+    for (const topic of EXPLORE_TOPICS) {
+      const topicPill = app.getTopicPill(topic);
       await expect(topicPill).toBeVisible({ timeout: 5_000 });
       await expect(topicPill).toBeEnabled();
     }
   });
 
-  test('pressing Shift+Enter adds a newline without submitting the query [Required #4]', async ({ page }) => {
+  test('Shift+Enter creates a new line in input without submitting [Required #4]', async ({ page }) => {
     /**
-     * Requirement: Shift+Enter creates a new line instead of sending.
+     * Requirement 4: Shift+Enter creates a new line instead of sending.
      */
-    await navigateToChatHome(page);
+    const app = new PermissionAgentApp(page);
+    await app.loadAndPrepareSession();
 
-    const textarea = page.locator(CHAT_SELECTORS.chatTextarea);
-    await textarea.click();
-    await textarea.fill('How does data permissioning work?');
-    await textarea.press('Shift+Enter');
-    await textarea.type('Can I revoke access at any time?');
+    await app.chatInput.click();
+    await app.chatInput.fill('How does data permissioning work?');
+    await app.chatInput.press('Shift+Enter');
+    await app.chatInput.type('Can I revoke access at any time?');
 
-    // Confirm multiline text formatting is preserved in the textarea
-    const currentInput = await textarea.inputValue();
-    expect(currentInput).toBe('How does data permissioning work?\nCan I revoke access at any time?');
+    // Confirm multiline formatting is retained in textarea
+    const inputValue = await app.chatInput.inputValue();
+    expect(inputValue).toBe('How does data permissioning work?\nCan I revoke access at any time?');
 
-    // Confirm no message bubble was submitted or created
-    const agentBubbles = page.locator(CHAT_SELECTORS.agentMessageBubble);
-    expect(await agentBubbles.count()).toBe(0);
+    // Confirm no message bubble was submitted
+    expect(await app.messageContainers.count()).toBe(0);
   });
 
-  test('send button is strictly disabled on empty or whitespace input [Input Boundary]', async ({ page }) => {
+  test('empty and whitespace-only input keeps send button disabled [Input Edge Case]', async ({ page }) => {
     /**
-     * Input Boundary Test: Validates that sending is blocked unless substantive text is typed,
-     * preventing empty prompt dispatches to the AI inference service.
+     * Edge case: Validates that sending is blocked unless substantive text is typed,
+     * preventing empty prompt dispatches to the AI backend.
      */
-    await navigateToChatHome(page);
-
-    const textarea = page.locator(CHAT_SELECTORS.chatTextarea);
-    const sendButton = page.locator(CHAT_SELECTORS.sendPromptButton);
+    const app = new PermissionAgentApp(page);
+    await app.loadAndPrepareSession();
 
     // Initial empty state
-    await expect(sendButton).toBeDisabled();
+    await expect(app.sendButton).toBeDisabled();
 
     // Spacing and tabs only
-    await textarea.click();
-    await textarea.fill('   \t  \n  ');
-    await expect(sendButton).toBeDisabled();
+    await app.chatInput.click();
+    await app.chatInput.fill('     \t  \n  ');
+    await expect(app.sendButton).toBeDisabled();
 
-    // Legitimate prompt input
-    await textarea.fill('What are ASK rewards?');
-    await expect(sendButton).toBeEnabled();
+    // Substantive prompt
+    await app.chatInput.fill('What are ASK rewards?');
+    await expect(app.sendButton).toBeEnabled();
 
     // Reset back to empty
-    await textarea.fill('');
-    await expect(sendButton).toBeDisabled();
+    await app.chatInput.fill('');
+    await expect(app.sendButton).toBeDisabled();
   });
 });
