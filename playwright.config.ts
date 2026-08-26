@@ -31,15 +31,5 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
-    {
-      name: 'chrome',
-      use: {
-        ...devices['Desktop Chrome'],
-        channel: 'chrome',
-        launchOptions: {
-          slowMo: 300, // visually watch actions at comfortable human speed
-        },
-      },
-    },
   ],
 });

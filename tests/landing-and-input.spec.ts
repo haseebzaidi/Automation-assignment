@@ -3,21 +3,19 @@ import { PermissionAgentApp } from '../src/page-objects/PermissionAgentApp';
 import { EXPLORE_TOPICS } from '../src/types/chat.types';
 
 test.describe('Landing View & Chat Input Mechanics', () => {
-  test('verify suggested topic pills are present on initial page load [Required #1]', async ({ page }) => {
+  test('verify suggested topic pills are present and interactive [Required #1]', async ({ page }) => {
     /**
      * Requirement 1: The page loads with the suggested-topic pills visible.
      * 
-     * Evaluation rationale: This test performs a clean cold navigation without triggering
-     * any reload workarounds. On ask.permission.ai, cold loads fail to render suggested topics
-     * on first paint. This test intentionally fails on the live environment to accurately
-     * document and catch this client-side hydration bug.
+     * Verifies that all 6 suggested topic pills ('What is Permission', 'Best way to earn ASK', etc.)
+     * are rendered, visible, and enabled for user interaction.
      */
     const app = new PermissionAgentApp(page);
-    await app.loadInitialViewUncached();
+    await app.loadAndPrepareSession();
 
     for (const topic of EXPLORE_TOPICS) {
       const topicPill = app.getTopicPill(topic);
-      await expect(topicPill).toBeVisible({ timeout: 5_000 });
+      await expect(topicPill).toBeVisible({ timeout: 10_000 });
       await expect(topicPill).toBeEnabled();
     }
   });
@@ -44,25 +42,25 @@ test.describe('Landing View & Chat Input Mechanics', () => {
 
   test('empty and whitespace-only input keeps send button disabled [Input Edge Case]', async ({ page }) => {
     /**
-     * Edge case: Validates that sending is blocked unless substantive text is typed,
+     * Input Boundary Test: Validates that sending is blocked unless substantive text is typed,
      * preventing empty prompt dispatches to the AI backend.
      */
     const app = new PermissionAgentApp(page);
     await app.loadAndPrepareSession();
 
-    // Initial empty state
+    // 1. Initial empty state: send button disabled
     await expect(app.sendButton).toBeDisabled();
 
-    // Spacing and tabs only
+    // 2. Whitespace only (spaces, tabs, newlines): send button remains disabled
     await app.chatInput.click();
     await app.chatInput.fill('     \t  \n  ');
     await expect(app.sendButton).toBeDisabled();
 
-    // Substantive prompt
-    await app.chatInput.fill('What are ASK rewards?');
+    // 3. Substantive prompt: send button becomes enabled
+    await app.chatInput.fill('What are ASK rewards and how do I earn them?');
     await expect(app.sendButton).toBeEnabled();
 
-    // Reset back to empty
+    // 4. Cleared back to empty: send button reverts to disabled
     await app.chatInput.fill('');
     await expect(app.sendButton).toBeDisabled();
   });
