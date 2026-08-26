@@ -1,83 +1,80 @@
 import { Page, Locator, expect } from '@playwright/test';
-import { SELECTORS, SUGGESTED_TOPICS, ERROR_MARKERS } from './selectors';
+import { CHAT_SELECTORS, PROMPT_TOPICS, SERVER_ERROR_PATTERNS, PromptTopic } from './selectors';
 
 /**
- * Dismisses the OneTrust cookie banner if it renders.
- * The banner loads asynchronously, so we handle it with a brief timeout without failing.
+ * Gracefully dismisses the asynchronous OneTrust consent dialog if present.
  */
-export async function dismissCookieBanner(page: Page, timeoutMs: number = 6_000): Promise<void> {
-  const rejectBtn = page.locator(SELECTORS.COOKIE_REJECT_BUTTON).first();
+export async function clearConsentModal(page: Page, waitTimeout: number = 5_000): Promise<void> {
+  const reject = page.locator(CHAT_SELECTORS.cookieRejectBtn).first();
   try {
-    if (await rejectBtn.isVisible({ timeout: timeoutMs })) {
-      await rejectBtn.click();
-      await rejectBtn.waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
+    if (await reject.isVisible({ timeout: waitTimeout })) {
+      await reject.click();
+      await reject.waitFor({ state: 'hidden', timeout: 4_000 }).catch(() => {});
     }
   } catch {
-    // Banner did not appear; continue safely.
+    // Cookie banner was not triggered or already handled
   }
 }
 
 /**
- * Navigates to the landing page in a ready, interactive state.
+ * Loads the pre-login chat interface in a stable, ready state.
  * 
- * Known application defect: suggested topic pills do not render on first paint
- * during cold loads. To allow downstream functional tests to proceed reliably,
- * this helper performs a single conditional reload if pills are absent.
+ * Note: On cold sessions, the web app's initial hydration fails to render topic pills.
+ * A single controlled page reload mounts them properly, allowing downstream tests to interact.
  */
-export async function openLanding(page: Page): Promise<void> {
+export async function navigateToChatHome(page: Page): Promise<void> {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await dismissCookieBanner(page);
+  await clearConsentModal(page);
 
-  const input = page.locator(SELECTORS.INPUT);
-  await input.waitFor({ state: 'visible', timeout: 30_000 });
+  const inputArea = page.locator(CHAT_SELECTORS.chatTextarea);
+  await inputArea.waitFor({ state: 'visible', timeout: 25_000 });
 
-  const firstPill = getTopicPill(page, SUGGESTED_TOPICS[0]);
-  const isPillVisible = await firstPill.isVisible({ timeout: 4_000 }).catch(() => false);
+  const samplePill = getSuggestedTopicPill(page, PROMPT_TOPICS[0]);
+  const pillRendered = await samplePill.isVisible({ timeout: 3_500 }).catch(() => false);
 
-  if (!isPillVisible) {
-    // Perform single reload workaround to mount suggested topic pills
+  if (!pillRendered) {
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await dismissCookieBanner(page);
-    await input.waitFor({ state: 'visible', timeout: 30_000 });
-    await firstPill.waitFor({ state: 'visible', timeout: 30_000 });
+    await clearConsentModal(page);
+    await inputArea.waitFor({ state: 'visible', timeout: 25_000 });
+    await samplePill.waitFor({ state: 'visible', timeout: 25_000 });
   }
 }
 
 /**
- * Navigates to the landing page without reload.
- * Used exclusively by the first-load smoke test to evaluate genuine first-visit behavior.
+ * Pure cold load of the landing page without reload.
+ * Used exclusively by test 1 to expose the initial mounting defect.
  */
-export async function openLandingDirect(page: Page): Promise<void> {
+export async function navigateColdLanding(page: Page): Promise<void> {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await dismissCookieBanner(page);
-  await page.locator(SELECTORS.INPUT).waitFor({ state: 'visible', timeout: 30_000 });
+  await clearConsentModal(page);
+  await page.locator(CHAT_SELECTORS.chatTextarea).waitFor({ state: 'visible', timeout: 25_000 });
 }
 
 /**
- * Returns a Locator for a suggested topic pill by its exact text.
+ * Returns a Locator for a specific topic pill button.
  */
-export function getTopicPill(page: Page, topic: string): Locator {
+export function getSuggestedTopicPill(page: Page, topic: PromptTopic | string): Locator {
   return page.getByRole('button', { name: topic, exact: true });
 }
 
 /**
- * Enters a free-text question into the ASK input and clicks the send button.
+ * Types a custom prompt into the ASK input and triggers submission via the send button.
  */
-export async function submitFreeText(page: Page, queryText: string): Promise<void> {
-  const input = page.locator(SELECTORS.INPUT);
-  const sendButton = page.locator(SELECTORS.SEND_BUTTON);
+export async function sendUserPrompt(page: Page, messageText: string): Promise<void> {
+  const textarea = page.locator(CHAT_SELECTORS.chatTextarea);
+  const sendBtn = page.locator(CHAT_SELECTORS.sendPromptButton);
 
-  await input.click();
-  await input.fill(queryText);
-  await expect(sendButton).toBeEnabled();
-  await sendButton.click();
+  await textarea.click();
+  await textarea.fill(messageText);
+  await expect(sendBtn).toBeEnabled();
+  await sendBtn.click();
 }
 
 /**
- * Retrieves the inner text of the latest agent response bubble.
+ * Retrieves the text content of the latest streamed agent message.
  */
-export async function getLatestAgentResponse(page: Page): Promise<string> {
-  const bubbles = page.locator(SELECTORS.AGENT_MESSAGE_TEXT);
+export async function fetchLatestAgentBubbleText(page: Page): Promise<string> {
+  const bubbles = page.locator(CHAT_SELECTORS.agentMessageContent);
   const count = await bubbles.count();
   if (count === 0) return '';
   const text = await bubbles.last().innerText();
@@ -85,58 +82,54 @@ export async function getLatestAgentResponse(page: Page): Promise<string> {
 }
 
 /**
- * Waits for the streaming AI response to complete and settle.
+ * Deterministically awaits the completion of an agent's streaming response.
  * 
- * Waiting Strategy (Deterministic Event-Driven + Quiescence):
- * 1. The UI swaps the Send button for a Stop button during generation.
- * 2. We wait for the Stop button to detach and the Send button to reappear.
- * 3. We poll the response text until length stabilizes across multiple samples (quiescence),
- *    preventing race conditions with partial streaming tokens.
+ * Strategy:
+ * 1. Watches for the send button to transform into a stop button, then revert when streaming finishes.
+ * 2. Employs text stability polling to ensure the full token stream has quiesced before reading.
  */
-export async function waitForAgentResponse(page: Page, timeoutMs: number = 60_000): Promise<string> {
-  const stopButton = page.locator(SELECTORS.STOP_BUTTON);
-  const sendButton = page.locator(SELECTORS.SEND_BUTTON);
+export async function awaitSettledAgentReply(page: Page, streamTimeout: number = 60_000): Promise<string> {
+  const stopBtn = page.locator(CHAT_SELECTORS.stopStreamingButton);
+  const sendBtn = page.locator(CHAT_SELECTORS.sendPromptButton);
 
-  // Catch the stop button appearing (best-effort since fast responses might transition quickly)
-  await stopButton.waitFor({ state: 'visible', timeout: 6_000 }).catch(() => {});
+  // Monitor the stop button lifecycle
+  await stopBtn.waitFor({ state: 'visible', timeout: 6_000 }).catch(() => {});
+  await stopBtn.waitFor({ state: 'detached', timeout: streamTimeout });
+  await expect(sendBtn).toBeVisible({ timeout: streamTimeout });
 
-  // Wait for generation to complete (stop button detached, send button visible)
-  await stopButton.waitFor({ state: 'detached', timeout: timeoutMs });
-  await expect(sendButton).toBeVisible({ timeout: timeoutMs });
-
-  // Settle text stream
-  return await pollTextSettled(page, 30_000);
+  // Await text stream stability (quiescence)
+  return await verifyTextStability(page, 25_000);
 }
 
 /**
- * Polls the latest agent bubble until its content stops changing across samples.
+ * Polls the newest message until text remains stable across consecutive intervals.
  */
-async function pollTextSettled(page: Page, timeoutMs: number = 30_000, sampleIntervalMs: number = 400): Promise<string> {
-  const deadline = Date.now() + timeoutMs;
-  let previousText = '';
-  let stableSampleCount = 0;
+async function verifyTextStability(page: Page, maxWaitMs: number = 25_000, stepMs: number = 400): Promise<string> {
+  const deadline = Date.now() + maxWaitMs;
+  let prevText = '';
+  let consecutiveMatches = 0;
 
   while (Date.now() < deadline) {
-    const currentText = await getLatestAgentResponse(page);
-    if (currentText.length > 0 && currentText === previousText) {
-      stableSampleCount++;
-      if (stableSampleCount >= 2) {
+    const currentText = await fetchLatestAgentBubbleText(page);
+    if (currentText.length > 0 && currentText === prevText) {
+      consecutiveMatches++;
+      if (consecutiveMatches >= 2) {
         return currentText;
       }
     } else {
-      stableSampleCount = 0;
+      consecutiveMatches = 0;
     }
-    previousText = currentText;
-    await page.waitForTimeout(sampleIntervalMs);
+    prevText = currentText;
+    await page.waitForTimeout(stepMs);
   }
 
-  return previousText;
+  return prevText;
 }
 
 /**
- * Checks whether an agent response matches known failure / crash patterns.
+ * Validates that the response is not a generic server crash or error bubble.
  */
-export function isErrorResponse(responseText: string): boolean {
-  const normalized = responseText.toLowerCase();
-  return ERROR_MARKERS.some((marker) => normalized.includes(marker));
+export function hasServerErrorIndicator(text: string): boolean {
+  const lower = text.toLowerCase();
+  return SERVER_ERROR_PATTERNS.some((marker) => lower.includes(marker));
 }

@@ -1,129 +1,172 @@
 /**
- * LLM Evaluation Module for Non-Deterministic AI Responses.
+ * LLM Evaluation Engine for Non-Deterministic Generative Responses.
  * 
- * Implements an Answer Relevancy & Semantic Grounding evaluator inspired by
- * Promptfoo and DeepEval standards. Evaluates non-deterministic output
- * across semantic coherence, domain topic grounding, substantive depth,
- * and rejection of trivial prompt echoing.
+ * Provides automated semantic scoring inspired by modern evaluation frameworks
+ * (Promptfoo, DeepEval). Grades streamed model responses across semantic relevance,
+ * topical density, structural completeness, and absence of echo artifacts.
  */
 
-export interface LLMEvalResult {
-  score: number;
-  passed: boolean;
-  threshold: number;
-  metrics: {
-    topicGroundingScore: number;
-    substantiveDepthScore: number;
-    antiEchoScore: number;
-    errorFreeScore: number;
-  };
-  reasons: string[];
+export interface EvalScoreBreakdown {
+  domainGrounding: number;
+  substantiveCompleteness: number;
+  promptOriginality: number;
+  faultTolerance: number;
 }
 
-export class LLMRelevancyEvaluator {
-  private static readonly DEFAULT_THRESHOLD = 0.70;
+export interface RelevancyEvaluationReport {
+  score: number;
+  passed: boolean;
+  minThreshold: number;
+  breakdown: EvalScoreBreakdown;
+  findings: string[];
+}
 
-  private static readonly TOPIC_KEYWORDS: Record<string, string[]> = {
+export class ModelResponseEvaluator {
+  private static readonly ACCEPTANCE_THRESHOLD = 0.70;
+
+  // Domain concept entity clusters for semantic validation
+  private static readonly TOPIC_LEXICON: Record<string, string[]> = {
     'what is permission': [
       'permission',
       'data',
       'ask',
       'token',
       'earn',
-      'economy',
       'reward',
       'consent',
       'control',
       'monetize',
       'platform',
-      'web3',
+      'economy',
+    ],
+    'best way to earn ask': [
+      'ask',
+      'earn',
+      'reward',
+      'data',
+      'browser',
+      'extension',
+      'shopping',
+      'ads',
+      'daily',
+      'activities',
+    ],
+    'what is passive earning': [
+      'passive',
+      'earn',
+      'data',
+      'browser',
+      'background',
+      'permission',
+      'rewards',
+      'ask',
+      'automatically',
+    ],
+    'how permission uses my data': [
+      'data',
+      'privacy',
+      'consent',
+      'secure',
+      'encryption',
+      'control',
+      'opt-in',
+      'advertisers',
+      'share',
     ],
   };
 
   /**
-   * Evaluates the non-deterministic response against the given prompt.
+   * Evaluates the non-deterministic output of an AI agent interaction.
    * 
-   * @param prompt The user or suggested topic prompt submitted.
-   * @param response The settled text response streamed from the agent.
-   * @param threshold Minimum score required to pass (default 0.70).
+   * @param prompt The submitted prompt or topic pill name.
+   * @param response The completed response text from the agent.
+   * @param threshold Minimum composite score (defaults to 0.70).
    */
-  public static evaluateAnswerRelevancy(
+  public static evaluateResponseRelevance(
     prompt: string,
     response: string,
-    threshold: number = LLMRelevancyEvaluator.DEFAULT_THRESHOLD
-  ): LLMEvalResult {
-    const reasons: string[] = [];
-    const normalizedPrompt = prompt.toLowerCase().trim();
-    const normalizedResponse = response.toLowerCase().trim();
+    threshold: number = ModelResponseEvaluator.ACCEPTANCE_THRESHOLD
+  ): RelevancyEvaluationReport {
+    const findings: string[] = [];
+    const cleanPrompt = prompt.toLowerCase().trim();
+    const cleanResponse = response.toLowerCase().trim();
 
-    // 1. Anti-Echo Evaluation: Response must not simply repeat the prompt
-    let antiEchoScore = 1.0;
-    if (normalizedResponse === normalizedPrompt) {
-      antiEchoScore = 0.0;
-      reasons.push('Response parroted the prompt word-for-word.');
-    } else if (normalizedResponse.startsWith(normalizedPrompt) && normalizedResponse.length < normalizedPrompt.length + 20) {
-      antiEchoScore = 0.3;
-      reasons.push('Response is an incomplete echo of the prompt.');
+    // 1. Anti-Echo Originality Assessment
+    let promptOriginality = 1.0;
+    if (cleanResponse === cleanPrompt) {
+      promptOriginality = 0.0;
+      findings.push('Agent returned an identical mirror echo of the prompt.');
+    } else if (cleanResponse.startsWith(cleanPrompt) && cleanResponse.length < cleanPrompt.length + 25) {
+      promptOriginality = 0.35;
+      findings.push('Agent merely reiterated the input phrase with negligible continuation.');
     }
 
-    // 2. Substantive Depth Evaluation: Response must be informative (> 50 chars, multi-clause/sentence)
-    let substantiveDepthScore = 0.0;
-    if (normalizedResponse.length >= 100) {
-      substantiveDepthScore = 1.0;
-    } else if (normalizedResponse.length >= 50) {
-      substantiveDepthScore = 0.7;
-    } else if (normalizedResponse.length >= 25) {
-      substantiveDepthScore = 0.4;
-      reasons.push('Response is too brief to provide a meaningful explanation.');
+    // 2. Substantive Completeness Assessment
+    let substantiveCompleteness = 0.0;
+    if (cleanResponse.length >= 120) {
+      substantiveCompleteness = 1.0;
+    } else if (cleanResponse.length >= 60) {
+      substantiveCompleteness = 0.8;
+    } else if (cleanResponse.length >= 30) {
+      substantiveCompleteness = 0.45;
+      findings.push('Response is unusually terse (<60 characters).');
     } else {
-      substantiveDepthScore = 0.0;
-      reasons.push('Response is an empty or truncated stub.');
+      substantiveCompleteness = 0.0;
+      findings.push('Response lacks substantive body or is a truncated fragment.');
     }
 
-    // 3. Error-Free Evaluation: Response must not indicate unhandled server errors
-    let errorFreeScore = 1.0;
-    const errorKeywords = ['i ran into an issue', 'something went wrong', 'please try again', 'internal server error'];
-    if (errorKeywords.some((k) => normalizedResponse.includes(k))) {
-      errorFreeScore = 0.0;
-      reasons.push('Response matched known API error markers.');
+    // 3. Fault Tolerance & Exception Handling
+    let faultTolerance = 1.0;
+    const failureSignatures = [
+      'i ran into an issue',
+      'something went wrong',
+      'please try again',
+      'internal error',
+      'unable to process',
+    ];
+    if (failureSignatures.some((sig) => cleanResponse.includes(sig))) {
+      faultTolerance = 0.0;
+      findings.push('Response matches known system exception or fallback strings.');
     }
 
-    // 4. Topic Grounding Evaluation: Response must contain domain-relevant entities
-    let topicGroundingScore = 0.0;
-    const expectedKeywords = LLMRelevancyEvaluator.TOPIC_KEYWORDS[normalizedPrompt] || ['permission', 'data', 'earn'];
-    const matchedKeywords = expectedKeywords.filter((k) => normalizedResponse.includes(k));
+    // 4. Domain Concept Grounding Assessment
+    let domainGrounding = 0.0;
+    const targetLexicon = ModelResponseEvaluator.TOPIC_LEXICON[cleanPrompt] || ['permission', 'data', 'earn', 'ask'];
+    const matchedConcepts = targetLexicon.filter((concept) => cleanResponse.includes(concept));
 
-    if (matchedKeywords.length >= 3) {
-      topicGroundingScore = 1.0;
-    } else if (matchedKeywords.length >= 2) {
-      topicGroundingScore = 0.8;
-    } else if (matchedKeywords.length === 1) {
-      topicGroundingScore = 0.5;
+    if (matchedConcepts.length >= 3) {
+      domainGrounding = 1.0;
+    } else if (matchedConcepts.length >= 2) {
+      domainGrounding = 0.85;
+    } else if (matchedConcepts.length === 1) {
+      domainGrounding = 0.5;
+      findings.push(`Only a single domain concept ('${matchedConcepts[0]}') was referenced.`);
     } else {
-      topicGroundingScore = 0.0;
-      reasons.push(`Response contains no relevant domain keywords for prompt '${prompt}'.`);
+      domainGrounding = 0.0;
+      findings.push(`No domain concepts matched the expected lexicon for '${prompt}'.`);
     }
 
-    // Composite Weighted Score (Promptfoo relevancy weighting)
+    // Weighted composite relevancy calculation
     const compositeScore =
-      topicGroundingScore * 0.40 +
-      substantiveDepthScore * 0.25 +
-      antiEchoScore * 0.20 +
-      errorFreeScore * 0.15;
+      domainGrounding * 0.40 +
+      substantiveCompleteness * 0.25 +
+      promptOriginality * 0.20 +
+      faultTolerance * 0.15;
 
-    const passed = compositeScore >= threshold;
+    const finalScore = Math.round(compositeScore * 100) / 100;
+    const passed = finalScore >= threshold;
 
     return {
-      score: Number(compositeScore.toFixed(2)),
+      score: finalScore,
       passed,
-      threshold,
-      metrics: {
-        topicGroundingScore,
-        substantiveDepthScore,
-        antiEchoScore,
-        errorFreeScore,
+      minThreshold: threshold,
+      breakdown: {
+        domainGrounding,
+        substantiveCompleteness,
+        promptOriginality,
+        faultTolerance,
       },
-      reasons,
+      findings,
     };
   }
 }
