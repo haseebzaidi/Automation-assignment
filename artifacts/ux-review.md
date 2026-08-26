@@ -1,30 +1,34 @@
-# UX Review — Desktop & Mobile, Pre- and Post-Signup
+# UX & Product Defect Review — ask.permission.ai
 
-Evaluated on Desktop (Chromium 1280x800) and Mobile Responsive Emulation (iPhone 14, 390x844). Explored the full lifecycle: pre-login chat agent, registration, email verification, and the post-signup portal (Wallet, ASK Balance, Data Enrichment Hub).
+Evaluated on Desktop (Chromium 1280x800) and Mobile Responsive Emulation (iPhone 14, 390x844). Thoroughly explored pre-login chat mechanics, prompt boundaries, session lifecycle, registration flows, and the post-signup portal.
 
 ## Overview
 
-- **What Works:** The streaming chat experience is responsive and smooth. On mobile, header navigation collapses cleanly into a top drawer, and the chat box remains accessible and sticky.
-- **What Is Rough:** A stark disconnect exists between the pre-login landing page (an open AI assistant) and the post-signup product (a Web3 data-monetization portal). Critical funnel friction also traps users during email verification.
+- **What Works:** Fluid response streaming, clean responsive layout collapsing, and immediate interactive feedback on standard queries.
+- **What Is Rough:** Critical unhandled edge cases in the chat frontend, complete absence of session persistence, silent character limits, and severe email verification lockouts.
 
-## Prioritized Improvements
+## Prioritized Improvements (Most Critical First)
 
-### 1. High (P1): Account Lockout on Verification Screen Without Exit Path
-- **Observation:** After signup, users reach the email verification screen. Attempting to visit login/signup routes or reload redirects back to the verification lockscreen.
-- **Why It Matters:** Users who mistype their email or wish to switch accounts are permanently blocked, causing direct signup drop-offs.
-- **Proposed Fix:** Provide a clear "Use a different email" or "Sign out" option on the verification screen.
+### 1. High (P1): Account Lockout on Verification Screen
+- **Observation:** Following registration, users are gated on the email verification screen. Navigating back, refreshing, or visiting `/login` immediately redirects back to the verification lock.
+- **Why It Matters:** Users who mistype their email cannot restart onboarding, permanently killing conversion.
+- **Proposed Fix:** Add an explicit "Use a different email" or "Sign out" action on the verification waiting page.
 
-### 2. High (P2): Topic Pills Fail to Mount on Initial Landing Paint
-- **Observation:** On cold loads, the agent greeting renders, but suggested topic pills do not appear until a manual page reload.
-- **Why It Matters:** First-time visitors land without clickable discovery hooks, reducing engagement and trial conversion.
-- **Proposed Fix:** Bundle suggested topic mounting with the initial greeting payload rather than relying on secondary client-side state transitions.
+### 2. High (P2): Cold First-Paint Topic Hydration Failure
+- **Observation:** On cold session loads, the agent greeting renders, but suggested topic pills remain completely unmounted until an explicit browser reload.
+- **Why It Matters:** Brand new visitors land without clickable exploration hooks, suppressing engagement.
+- **Proposed Fix:** Co-locate suggested topic state with the initial greeting SSR payload.
 
-### 3. Medium (P3): Conflicting Wallet Milestone Metrics
-- **Observation:** The onboarding dashboard awards 100 ASK, displays "2% of minimum reward tier," but cites both "4,900 ASK needed" and a "5,000 ASK" progress cap.
-- **Why It Matters:** Discrepancies between 4,900 and 5,000 confuse users and make earning thresholds seem unachievable.
-- **Proposed Fix:** Reconcile milestone metrics to 5,000 ASK and introduce incremental progress tiers (e.g., 500 ASK mini-goals).
+### 3. Medium (P3): Silent Send Button Disablement on Large Prompts Without Feedback
+- **Observation:** Pasting queries over ~1,000 characters silently disables the Send button without displaying a character counter, limit indicator, or warning tooltip.
+- **Why It Matters:** Users believe the application froze or broke without understanding why they cannot submit.
+- **Proposed Fix:** Introduce an active character counter (`X / 1000`) and a clear validation banner when exceeding limits.
 
-### 4. Low (P4): Verification Screen Route Flickers
-- **Observation:** Clicking the header logo while verification is pending briefly flashes the homepage before snapping back to the gate.
-- **Why It Matters:** Creates an unpolished, jarring aesthetic.
-- **Proposed Fix:** Disable logo redirect routing when verification is unconfirmed.
+### 4. Medium (P4): Code/Tag Inputs Trigger Unhandled Backend Crash Bubbles
+- **Observation:** Prompts containing HTML or script tags (e.g. `<script>`, `<b>`) crash the backend API, rendering an unhelpful `"I ran into an issue"` bubble.
+- **Why It Matters:** Technical users asking development or security questions encounter repeated failures.
+- **Proposed Fix:** Sanitize input tokens on the API gateway before dispatching to the LLM agent.
+
+### 5. Low (P5): Conflicting Footer Domain Links
+- **Observation:** Footer navigation duplicates "Privacy Policy" and "Terms of Use", linking inconsistently to `permission.ai` and `permission.io`.
+- **Proposed Fix:** Unify company domain naming across legal links.
